@@ -1,3 +1,4 @@
+/* global marked hljs */
 (function () {
     const vscode = acquireVsCodeApi();
     const messagesEl = document.getElementById('messages');
@@ -22,12 +23,13 @@
         activities: [],
         sequence: 0,
         autoFollow: true,
+        pendingThinking: '',
+        pendingResponse: '',
     };
     const stream = {
         container: null,
-        thinkingWrapper: null,
-        thinkingContent: null,
-        responseContent: null,
+        thinkingContainer: null,
+        responseContainer: null,
     };
 
     function nextId(prefix) {
@@ -260,51 +262,35 @@
         const bubble = document.createElement('div');
         bubble.className = 'message__bubble';
 
-        const thinkingWrapper = document.createElement('details');
-        thinkingWrapper.className = 'thinking-card';
-        thinkingWrapper.open = true;
-        thinkingWrapper.hidden = true;
+        // 思考内容容器
+        const thinkingContainer = document.createElement('div');
+        thinkingContainer.className = 'markdown-body thinking-content';
+        thinkingContainer.hidden = true;
 
-        const thinkingSummary = document.createElement('summary');
-        thinkingSummary.textContent = '思考过程';
+        // 回复内容容器
+        const responseContainer = document.createElement('div');
+        responseContainer.className = 'markdown-body response-content';
 
-        const thinkingContent = document.createElement('pre');
-        thinkingContent.className = 'stream-content stream-content--thinking';
-
-        thinkingWrapper.appendChild(thinkingSummary);
-        thinkingWrapper.appendChild(thinkingContent);
-
-        const responseContent = document.createElement('pre');
-        responseContent.className = 'stream-content stream-content--response';
-
-        bubble.appendChild(thinkingWrapper);
-        bubble.appendChild(responseContent);
+        bubble.appendChild(thinkingContainer);
+        bubble.appendChild(responseContainer);
         container.appendChild(label);
         container.appendChild(bubble);
 
         stream.container = container;
-        stream.thinkingWrapper = thinkingWrapper;
-        stream.thinkingContent = thinkingContent;
-        stream.responseContent = responseContent;
+        stream.thinkingContainer = thinkingContainer;
+        stream.responseContainer = responseContainer;
         messagesEl.appendChild(container);
     }
 
-    function appendStreamChunks(thinkingChunk, responseChunk) {
-        if (!thinkingChunk && !responseChunk) {
-            return;
-        }
-
+    function updateStreamContent() {
         ensureStreamElements();
-
-        if (thinkingChunk) {
-            stream.thinkingWrapper.hidden = false;
-            stream.thinkingContent.textContent += thinkingChunk;
+        if (state.pendingThinking) {
+            stream.thinkingContainer.hidden = false;
+            stream.thinkingContainer.innerHTML = renderMarkdown(state.pendingThinking);
         }
-
-        if (responseChunk) {
-            stream.responseContent.textContent += responseChunk;
+        if (state.pendingResponse) {
+            stream.responseContainer.innerHTML = renderMarkdown(state.pendingResponse);
         }
-
         if (state.autoFollow) {
             requestAnimationFrame(scrollMessagesToBottom);
         }
@@ -315,9 +301,10 @@
             stream.container.remove();
         }
         stream.container = null;
-        stream.thinkingWrapper = null;
-        stream.thinkingContent = null;
-        stream.responseContent = null;
+        stream.thinkingContainer = null;
+        stream.responseContainer = null;
+        state.pendingThinking = '';
+        state.pendingResponse = '';
     }
 
     function escapeHtml(value) {
@@ -327,6 +314,69 @@
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#039;');
+    }
+
+    function renderMarkdown(text) {
+        if (!text) return '';
+
+        const lines = text.split('\n');
+        let inCodeBlock = false;
+        let codeLang = '';
+        let codeLines = [];
+        let normalLines = [];
+        let resultHtml = '';
+
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            const trimmedLine = line.trim();
+
+            // 检测代码块开始或结束（行以 ``` 开头）
+            if (trimmedLine.startsWith('```')) {
+                if (!inCodeBlock) {
+                    // 进入代码块
+                    inCodeBlock = true;
+                    codeLang = trimmedLine.substring(3).trim();
+                    // 将之前累积的普通文本渲染并加入结果
+                    if (normalLines.length > 0) {
+                        resultHtml += marked.parse(normalLines.join('\n'));
+                        normalLines = [];
+                    }
+                    continue;
+                } else {
+                    // 退出代码块
+                    inCodeBlock = false;
+                    // 渲染累积的代码行
+                    const codeContent = codeLines.join('\n');
+                    const validLang = codeLang && hljs.getLanguage(codeLang) ? codeLang : 'plaintext';
+                    const highlighted = hljs.highlight(validLang, codeContent).value;
+                    resultHtml += `<pre><code class="hljs language-${validLang}">${highlighted}</code></pre>`;
+                    codeLines = [];
+                    codeLang = '';
+                    continue;
+                }
+            }
+
+            if (inCodeBlock) {
+                codeLines.push(line);
+            } else {
+                normalLines.push(line);
+            }
+        }
+
+        // 处理剩余的普通文本
+        if (normalLines.length > 0) {
+            resultHtml += marked.parse(normalLines.join('\n'));
+        }
+
+        // 处理未闭合的代码块
+        if (codeLines.length > 0) {
+            const codeContent = codeLines.join('\n');
+            const validLang = codeLang && hljs.getLanguage(codeLang) ? codeLang : 'plaintext';
+            const highlighted = hljs.highlight(validLang, codeContent).value;
+            resultHtml += `<pre><code class="hljs language-${validLang}">${highlighted}</code></pre>`;
+        }
+
+        return resultHtml;
     }
 
     function sendCurrentMessage() {
@@ -388,7 +438,14 @@
                 renderHeader();
                 break;
             case 'assistantStream':
-                appendStreamChunks(message.thinkingChunk || '', message.responseChunk || '');
+                if (message.thinkingChunk) {
+                    state.pendingThinking += message.thinkingChunk;
+                    updateStreamContent();
+                }
+                if (message.responseChunk) {
+                    state.pendingResponse += message.responseChunk;
+                    updateStreamContent();
+                }
                 break;
             case 'assistantFinal':
                 resetStream();
