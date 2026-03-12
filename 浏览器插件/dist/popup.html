@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {
+      width: 200px;
+      padding: 16px;
+      font-family: Arial, sans-serif;
+      text-align: center;
+    }
+    .status {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin: 10px 0;
+    }
+    .indicator {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background-color: gray;
+    }
+    .connected .indicator {
+      background-color: green;
+    }
+    .disconnected .indicator {
+      background-color: red;
+    }
+    .status-text {
+      font-size: 14px;
+    }
+    button {
+      margin-top: 10px;
+      padding: 5px 10px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h3>DeepSeek Bridge</h3>
+  <div class="status" id="statusContainer">
+    <span class="indicator" id="indicator"></span>
+    <span class="status-text" id="statusText">检查中...</span>
+  </div>
+  <button id="refreshBtn">刷新状态</button>
+  <script src="popup.js"></script>
+</body>
+</html>

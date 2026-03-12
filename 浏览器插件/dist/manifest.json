@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "DeepSeek Local Bridge",
+  "version": "1.0",
+  "description": "将 DeepSeek 网页 AI 回复转发到本地应用，并支持从本地应用发送消息",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://chat.deepseek.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://chat.deepseek.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["inject.js"],
+      "matches": ["https://chat.deepseek.com/*"]
+    }
+  ]
+}

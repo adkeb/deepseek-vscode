@@ -1,0 +1,96 @@
+{
+  "name": "deepseek-vscode",
+  "displayName": "DeepSeek Assistant",
+  "description": "VSCode端DeepSeek AI助手，通过本地应用实现工具调用",
+  "version": "0.1.0",
+  "publisher": "your-name",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:deepseek.start",
+    "onCommand:deepseek.connect",
+    "onCommand:deepseek.disconnect",
+    "onCommand:deepseek.toggleThinking",
+    "onCommand:deepseek.toggleSearch",
+    "onWebviewPanel:deepseek.chat"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "deepseek.start",
+        "title": "DeepSeek: 启动聊天面板"
+      },
+      {
+        "command": "deepseek.connect",
+        "title": "DeepSeek: 连接后端"
+      },
+      {
+        "command": "deepseek.disconnect",
+        "title": "DeepSeek: 断开连接"
+      },
+      {
+        "command": "deepseek.toggleThinking",
+        "title": "DeepSeek: 切换深度思考"
+      },
+      {
+        "command": "deepseek.toggleSearch",
+        "title": "DeepSeek: 切换智能搜索"
+      },
+      {
+        "command": "deepseek.runTool",
+        "title": "DeepSeek: 运行 MCP 请求 (测试)"
+      }
+    ],
+    "configuration": {
+      "title": "DeepSeek",
+      "properties": {
+        "deepseek.backendPort": {
+          "type": "number",
+          "default": 8765,
+          "description": "Python后端WebSocket端口"
+        },
+        "deepseek.autoConnect": {
+          "type": "boolean",
+          "default": true,
+          "description": "启动时自动连接后端"
+        },
+        "deepseek.allowedCommands": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "description": "额外允许 AI 调用的 VS Code 命令 ID 白名单"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "node ./node_modules/typescript/bin/tsc -p ./",
+    "watch": "node ./node_modules/typescript/bin/tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "node ./node_modules/eslint/bin/eslint.js src --ext ts",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/markdown-it": "^14.1.2",
+    "@types/node": "^20.x",
+    "@types/vscode": "^1.85.0",
+    "@types/ws": "^8.5.10",
+    "@typescript-eslint/eslint-plugin": "^6.21.0",
+    "@typescript-eslint/parser": "^6.21.0",
+    "eslint": "^8.56.0",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "highlight.js": "^11.11.1",
+    "markdown-it": "^14.1.1",
+    "ws": "^8.16.0"
+  }
+}
