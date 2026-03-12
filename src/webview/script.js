@@ -20,12 +20,14 @@
         searchEnabled: false,
         messages: [],
         activities: [],
-        stream: {
-            thinkingHtml: '',
-            responseHtml: '',
-            active: false,
-        },
         sequence: 0,
+        autoFollow: true,
+    };
+    const stream = {
+        container: null,
+        thinkingWrapper: null,
+        thinkingContent: null,
+        responseContent: null,
     };
 
     function nextId(prefix) {
@@ -47,21 +49,30 @@
         sendBtn.disabled = !state.connected;
         thinkBtn.classList.toggle('mode-button--active', state.thinkingEnabled);
         searchBtn.classList.toggle('mode-button--active', state.searchEnabled);
+        thinkBtn.setAttribute('aria-pressed', String(state.thinkingEnabled));
+        searchBtn.setAttribute('aria-pressed', String(state.searchEnabled));
+        thinkBtn.title = state.thinkingEnabled ? '深度思考：已开启' : '深度思考：已关闭';
+        searchBtn.title = state.searchEnabled ? '智能搜索：已开启' : '智能搜索：已关闭';
     }
 
     function renderMessages() {
+        const shouldStickToBottom = state.autoFollow;
+        const previousScrollTop = messagesEl.scrollTop;
         const fragments = [];
 
         for (const message of state.messages) {
             fragments.push(renderMessage(message));
         }
 
-        if (state.stream.active && (state.stream.thinkingHtml || state.stream.responseHtml)) {
-            fragments.push(renderAssistantStream());
-        }
-
         messagesEl.innerHTML = fragments.join('');
-        messagesEl.scrollTop = messagesEl.scrollHeight;
+        if (stream.container) {
+            messagesEl.appendChild(stream.container);
+        }
+        if (shouldStickToBottom) {
+            scrollMessagesToBottom();
+        } else {
+            messagesEl.scrollTop = previousScrollTop;
+        }
     }
 
     function renderActivities() {
@@ -134,30 +145,6 @@
         }
 
         return '';
-    }
-
-    function renderAssistantStream() {
-        const thinkingBlock = state.stream.thinkingHtml
-            ? `
-                <details class="thinking-card" open>
-                    <summary>思考过程</summary>
-                    <div class="markdown-body">${state.stream.thinkingHtml}</div>
-                </details>
-            `
-            : '';
-        const responseBlock = state.stream.responseHtml
-            ? `<div class="markdown-body">${state.stream.responseHtml}</div>`
-            : '<div class="assistant-placeholder">等待 AI 输出…</div>';
-
-        return `
-            <article class="message message--assistant message--streaming">
-                <div class="message__label">AI 输出中</div>
-                <div class="message__bubble">
-                    ${thinkingBlock}
-                    ${responseBlock}
-                </div>
-            </article>
-        `;
     }
 
     function renderActivityCard(activity, compact) {
@@ -250,12 +237,83 @@
     function clearLocalConversation() {
         state.messages = [];
         state.activities = [];
-        state.stream = {
-            thinkingHtml: '',
-            responseHtml: '',
-            active: false,
-        };
+        resetStream();
         renderAll();
+    }
+
+    function ensureStreamElements() {
+        if (stream.container) {
+            return;
+        }
+
+        const container = document.createElement('article');
+        container.className = 'message message--assistant message--streaming';
+
+        const label = document.createElement('div');
+        label.className = 'message__label';
+        label.textContent = 'AI 输出中';
+
+        const bubble = document.createElement('div');
+        bubble.className = 'message__bubble';
+
+        const thinkingWrapper = document.createElement('details');
+        thinkingWrapper.className = 'thinking-card';
+        thinkingWrapper.open = true;
+        thinkingWrapper.hidden = true;
+
+        const thinkingSummary = document.createElement('summary');
+        thinkingSummary.textContent = '思考过程';
+
+        const thinkingContent = document.createElement('pre');
+        thinkingContent.className = 'stream-content stream-content--thinking';
+
+        thinkingWrapper.appendChild(thinkingSummary);
+        thinkingWrapper.appendChild(thinkingContent);
+
+        const responseContent = document.createElement('pre');
+        responseContent.className = 'stream-content stream-content--response';
+
+        bubble.appendChild(thinkingWrapper);
+        bubble.appendChild(responseContent);
+        container.appendChild(label);
+        container.appendChild(bubble);
+
+        stream.container = container;
+        stream.thinkingWrapper = thinkingWrapper;
+        stream.thinkingContent = thinkingContent;
+        stream.responseContent = responseContent;
+        messagesEl.appendChild(container);
+    }
+
+    function appendStreamChunks(thinkingChunk, responseChunk) {
+        if (!thinkingChunk && !responseChunk) {
+            return;
+        }
+
+        ensureStreamElements();
+
+        if (thinkingChunk) {
+            stream.thinkingWrapper.hidden = false;
+            stream.thinkingContent.textContent += thinkingChunk;
+        }
+
+        if (responseChunk) {
+            stream.responseContent.textContent += responseChunk;
+        }
+
+        if (state.autoFollow) {
+            scrollMessagesToBottom();
+        }
+    }
+
+    function resetStream() {
+        if (stream.container) {
+            stream.container.remove();
+        }
+        stream.container = null;
+        stream.thinkingWrapper = null;
+        stream.thinkingContent = null;
+        stream.responseContent = null;
     }
 
     function escapeHtml(value) {
@@ -273,6 +331,7 @@
             return;
         }
 
+        state.autoFollow = true;
         pushMessage({
             id: nextId('user'),
             role: 'user',
@@ -284,6 +343,16 @@
         });
         inputEl.value = '';
         inputEl.focus();
+    }
+
+    function isNearBottom() {
+        const threshold = 40;
+        const distanceToBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight;
+        return distanceToBottom <= threshold;
+    }
+
+    function scrollMessagesToBottom() {
+        messagesEl.scrollTop = messagesEl.scrollHeight;
     }
 
     window.addEventListener('message', (event) => {
@@ -307,15 +376,10 @@
                 renderHeader();
                 break;
             case 'assistantStream':
-                state.stream.active = true;
-                state.stream.thinkingHtml = message.thinkingHtml || '';
-                state.stream.responseHtml = message.responseHtml || '';
-                renderMessages();
+                appendStreamChunks(message.thinkingChunk || '', message.responseChunk || '');
                 break;
             case 'assistantFinal':
-                state.stream.active = false;
-                state.stream.thinkingHtml = '';
-                state.stream.responseHtml = '';
+                resetStream();
                 if (message.thinkingHtml || message.responseHtml) {
                     state.messages.push({
                         id: nextId('assistant'),
@@ -395,6 +459,10 @@
                 button.textContent = '复制';
             }, 1200);
         });
+    });
+
+    messagesEl.addEventListener('scroll', () => {
+        state.autoFollow = isNearBottom();
     });
 
     vscode.postMessage({ command: 'ready' });

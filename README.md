@@ -164,6 +164,16 @@ https://chat.deepseek.com/
 - `window.open_file`
 - `commands.execute`
 
+### 写入 Markdown / 代码块时的特别限制
+
+当前写入类工具在 JSON 参数里承载正文内容，因此有一个必须遵守的限制：
+
+- 当使用 `workspace.write_file`、`editor.replace_selection`、`editor.apply_text_edits` 写入正文时，正文内容里**不准直接出现原样的三个反引号**
+- 如果需要写 Markdown 代码块，请把三个反引号写成 `\u0060\u0060\u0060`
+- 或者直接改用 `~~~` 作为代码围栏
+
+原因是当前外层协议本身就是用 ` ```mcp ` 代码块承载请求；如果正文里直接出现原样三个反引号，外层代码块可能会提前闭合，最终导致 JSON 解析失败。
+
 ## 常用开发命令
 
 编译：
@@ -201,6 +211,11 @@ npm test
 - 一个 ` ```mcp ` fenced code block
 - 合法 JSON
 - 合法 JSON-RPC 2.0 请求
+
+如果是写入 Markdown/README 这类正文，还要额外确认：
+
+- `content` / `text` 字段里没有直接出现原样的三个反引号
+- 需要代码块时，使用 `\u0060\u0060\u0060` 或 `~~~`
 
 ### 4. `commands.execute` 被拒绝
 

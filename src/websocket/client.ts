@@ -100,7 +100,6 @@ export class WebSocketClient {
             this.ws.on('message', (data: WebSocket.Data) => {
                 try {
                     const message = JSON.parse(data.toString());
-                    console.log('[DeepSeek] 收到消息:', message);
                     this.messageEmitter.fire(message);
                 } catch (error) {
                     console.error('[DeepSeek] 消息解析失败:', error);

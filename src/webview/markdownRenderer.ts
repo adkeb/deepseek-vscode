@@ -64,7 +64,7 @@ export class MarkdownRenderer {
                 }).value;
             }
 
-            return hljs.highlightAuto(code).value;
+            return this.md.utils.escapeHtml(code);
         } catch (error) {
             return this.md.utils.escapeHtml(code);
         }

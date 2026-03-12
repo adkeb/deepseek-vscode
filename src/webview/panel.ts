@@ -37,6 +37,9 @@ export class ChatPanel {
     private _currentThinkingContent = '';
     private _currentResponseContent = '';
     private _toolActivitySequence = 0;
+    private _pendingThinkingChunk = '';
+    private _pendingResponseChunk = '';
+    private _streamFlushTimer: NodeJS.Timeout | undefined;
 
     private constructor(
         panel: vscode.WebviewPanel,
@@ -104,6 +107,7 @@ export class ChatPanel {
 
     public dispose() {
         ChatPanel.currentPanel = undefined;
+        this.clearStreamFlushTimer();
         this._panel.dispose();
 
         while (this._disposables.length) {
@@ -154,6 +158,9 @@ export class ChatPanel {
             case 'clearConversation':
                 this._currentThinkingContent = '';
                 this._currentResponseContent = '';
+                this._pendingThinkingChunk = '';
+                this._pendingResponseChunk = '';
+                this.clearStreamFlushTimer();
                 this.postMessage({ type: 'conversationCleared' });
                 this.postSystemNotice('info', '已清空插件面板历史，网页端会话不会被重置。');
                 break;
@@ -172,20 +179,22 @@ export class ChatPanel {
     private async handleBackendMessage(data: Record<string, unknown>) {
         if (data.type === 'ai_chunk') {
             if (data.chunkType === 'thinking') {
-                this._currentThinkingContent += String(data.content ?? '');
+                const chunk = String(data.content ?? '');
+                this._currentThinkingContent += chunk;
+                this._pendingThinkingChunk += chunk;
             } else if (data.chunkType === 'response') {
-                this._currentResponseContent += String(data.content ?? '');
+                const chunk = String(data.content ?? '');
+                this._currentResponseContent += chunk;
+                this._pendingResponseChunk += chunk;
             }
 
-            this.postMessage({
-                type: 'assistantStream',
-                thinkingHtml: this._renderer.render(this._currentThinkingContent),
-                responseHtml: this._renderer.render(this._currentResponseContent),
-            });
+            this.scheduleStreamFlush();
             return;
         }
 
         if (data.type === 'ai_end') {
+            this.clearStreamFlushTimer();
+            this.flushPendingStreamChunks();
             await this.finalizeAssistantTurn();
         }
     }
@@ -217,6 +226,39 @@ export class ChatPanel {
 
         const response = await this.executeMcpRequest(parsed.request);
         this._wsClient.sendMessage(formatTransportResponse(response));
+    }
+
+    private scheduleStreamFlush() {
+        if (this._streamFlushTimer) {
+            return;
+        }
+
+        this._streamFlushTimer = setTimeout(() => {
+            this._streamFlushTimer = undefined;
+            this.flushPendingStreamChunks();
+        }, 33);
+    }
+
+    private flushPendingStreamChunks() {
+        if (!this._pendingThinkingChunk && !this._pendingResponseChunk) {
+            return;
+        }
+
+        this.postMessage({
+            type: 'assistantStream',
+            thinkingChunk: this._pendingThinkingChunk,
+            responseChunk: this._pendingResponseChunk,
+        });
+
+        this._pendingThinkingChunk = '';
+        this._pendingResponseChunk = '';
+    }
+
+    private clearStreamFlushTimer() {
+        if (this._streamFlushTimer) {
+            clearTimeout(this._streamFlushTimer);
+            this._streamFlushTimer = undefined;
+        }
     }
 
     private async executeMcpRequest(request: AnyMcpRequest): Promise<JsonRpcResponse> {
@@ -410,6 +452,9 @@ export class ChatPanel {
             '批量工具调用只允许 method = "deepseek/tools/callBatch"。',
             '普通回答不要夹带可执行的 MCP 代码块；如果只是展示 JSON 示例，请使用 ```json 而不是 ```mcp。',
             '收到 ```mcp-result 代码块时，要把它当作工具结果继续完成原任务，不要把它当成新的用户需求。',
+            '重要：当你调用 workspace.write_file、editor.replace_selection、editor.apply_text_edits 写入正文内容时，正文里不准直接出现原样的三个反引号。',
+            '如果需要写 Markdown 代码块，必须把三个反引号写成 \\u0060\\u0060\\u0060，或者改用 ~~~ 代码围栏。',
+            '不要把包含原样三个反引号的正文直接放进 content 或 text 字段，否则外层 MCP 代码块会被截断并导致 JSON 解析失败。',
             '',
             '可用工具：',
             toolCatalog,
@@ -468,7 +513,6 @@ export class ChatPanel {
         <header class="app-header">
             <div class="brand">
                 <div class="brand__title">DeepSeek Assistant</div>
-                <div class="brand__subtitle">本地桥接聊天</div>
             </div>
             <div class="header-actions">
                 <div class="status-chip" id="statusChip">
@@ -485,16 +529,16 @@ export class ChatPanel {
 
             <div class="composer">
                 <textarea id="input" placeholder="描述你的目标，或让 AI 读取/修改当前工作区内容。"></textarea>
-                <div class="composer__controls">
-                    <div class="composer__modes">
-                        <button class="mode-button" id="thinkBtn" type="button">深度思考</button>
-                        <button class="mode-button" id="searchBtn" type="button">智能搜索</button>
+                <div class="composer__footer">
+                    <div class="composer__meta">
+                        <div class="composer__status" id="composerStatus">等待连接</div>
+                        <div class="composer__hint">Shift + Enter 换行，Enter 发送</div>
                     </div>
-                    <div class="composer__hint">Shift + Enter 换行，Enter 发送</div>
-                </div>
-                <div class="composer__actions">
-                    <div class="composer__status" id="composerStatus">等待连接</div>
-                    <button class="send-button" id="sendBtn" type="button">发送</button>
+                    <div class="composer__actions">
+                        <button class="mode-button" id="thinkBtn" data-mode="thinking" type="button">深度思考</button>
+                        <button class="mode-button" id="searchBtn" data-mode="search" type="button">智能搜索</button>
+                        <button class="send-button" id="sendBtn" type="button">发送</button>
+                    </div>
                 </div>
                 <details class="activity-drawer">
                     <summary class="activity-drawer__summary">
