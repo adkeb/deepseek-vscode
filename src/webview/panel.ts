@@ -453,7 +453,7 @@ export class ChatPanel {
             '普通回答不要夹带可执行的 MCP 代码块；如果只是展示 JSON 示例，请使用 ```json 而不是 ```mcp。',
             '收到 ```mcp-result 代码块时，要把它当作工具结果继续完成原任务，不要把它当成新的用户需求。',
             '重要：当你调用 workspace.write_file、editor.replace_selection、editor.apply_text_edits 写入正文内容时，正文里不准直接出现原样的三个反引号。',
-            '如果需要写 Markdown 代码块，必须把三个反引号写成 \\u0060\\u0060\\u0060，或者改用 ~~~ 代码围栏。',
+            '如果需要写 Markdown 代码块，必须把三个反引号写成 \\\\u0060\\\\u0060\\\\u0060，或者改用 ~~~ 代码围栏。',
             '不要把包含原样三个反引号的正文直接放进 content 或 text 字段，否则外层 MCP 代码块会被截断并导致 JSON 解析失败。',
             '',
             '可用工具：',
@@ -515,6 +515,11 @@ export class ChatPanel {
                 <div class="brand__title">DeepSeek Assistant</div>
             </div>
             <div class="header-actions">
+                <select class="theme-selector" id="themeSelector">
+                    <option value="dark">暗色</option>
+                    <option value="gray-light">淡灰色</option>
+                    <option value="light">浅色</option>
+                </select>
                 <div class="status-chip" id="statusChip">
                     <span class="status-chip__dot" id="statusDot"></span>
                     <span id="statusLabel">未连接</span>
@@ -523,6 +528,16 @@ export class ChatPanel {
                 <button class="ghost-button" id="clearBtn" type="button">清空面板</button>
             </div>
         </header>
+
+        <!-- 固定顶部活动条 -->
+        <div class="activity-bar" id="activityBar">
+            <div class="activity-bar__header" id="activityBarHeader">
+                <span class="activity-bar__title">工具活动</span>
+                <span class="activity-bar__count" id="activityCount">0</span>
+                <button class="activity-bar__toggle" id="activityToggle" type="button">▼</button>
+            </div>
+            <div class="activity-bar__list" id="activityList" style="display: none;"></div>
+        </div>
 
         <main class="conversation-panel">
             <div class="messages" id="messages"></div>
@@ -540,13 +555,6 @@ export class ChatPanel {
                         <button class="send-button" id="sendBtn" type="button">发送</button>
                     </div>
                 </div>
-                <details class="activity-drawer">
-                    <summary class="activity-drawer__summary">
-                        <span>工具活动</span>
-                        <span class="activity-drawer__count" id="activityCount">0</span>
-                    </summary>
-                    <div class="activity-list" id="activityList"></div>
-                </details>
             </div>
         </main>
     </div>

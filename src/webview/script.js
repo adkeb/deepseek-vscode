@@ -71,7 +71,11 @@
         if (shouldStickToBottom) {
             scrollMessagesToBottom();
         } else {
-            messagesEl.scrollTop = previousScrollTop;
+            // 按比例恢复滚动位置
+            const newScrollHeight = messagesEl.scrollHeight;
+            if (previousScrollPosition.scrollHeight > 0) {
+                messagesEl.scrollTop = (previousScrollPosition.scrollTop / previousScrollPosition.scrollHeight) * newScrollHeight;
+            }
         }
     }
 
@@ -302,7 +306,7 @@
         }
 
         if (state.autoFollow) {
-            scrollMessagesToBottom();
+            requestAnimationFrame(scrollMessagesToBottom);
         }
     }
 
@@ -363,6 +367,14 @@
                 state.backendPort = message.backendPort || 8765;
                 state.thinkingEnabled = Boolean(message.modeState.thinkingEnabled);
                 state.searchEnabled = Boolean(message.modeState.searchEnabled);
+                // 恢复保存的主题
+                const savedTheme = localStorage.getItem('deepseek-theme') || 'dark';
+                document.body.classList.add(`theme-${savedTheme}`);
+                const themeSelector = document.getElementById('themeSelector');
+                if (themeSelector) {
+                    themeSelector.value = savedTheme;
+                }
+
                 renderAll();
                 break;
             case 'connectionState':
@@ -464,6 +476,42 @@
     messagesEl.addEventListener('scroll', () => {
         state.autoFollow = isNearBottom();
     });
+    
+    // 主题切换
+    const themeSelector = document.getElementById('themeSelector');
+    if (themeSelector) {
+        themeSelector.addEventListener('change', (e) => {
+            const theme = e.target.value;
+            // 移除所有现有主题类
+            document.body.className = document.body.className
+                .split(' ')
+                .filter(cls => !cls.startsWith('theme-'))
+                .join(' ');
+            document.body.classList.add(`theme-${theme}`);
+            localStorage.setItem('deepseek-theme', theme);
+        });
+    }
+
+    // 活动条折叠/展开
+    const activityBarHeader = document.getElementById('activityBarHeader');
+    const activityToggle = document.getElementById('activityToggle');
+    // activityListEl 已在文件开头声明，可直接使用
+    if (activityBarHeader && activityListEl && activityToggle) {
+        activityBarHeader.addEventListener('click', (e) => {
+            // 防止点击按钮时触发两次（按钮在header内）
+            if (e.target === activityToggle) return;
+            const isVisible = activityListEl.style.display === 'block';
+            activityListEl.style.display = isVisible ? 'none' : 'block';
+            activityToggle.textContent = isVisible ? '▼' : '▲';
+        });
+        
+        activityToggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isVisible = activityListEl.style.display === 'block';
+            activityListEl.style.display = isVisible ? 'none' : 'block';
+            activityToggle.textContent = isVisible ? '▼' : '▲';
+        });
+    }
 
     vscode.postMessage({ command: 'ready' });
 })();
